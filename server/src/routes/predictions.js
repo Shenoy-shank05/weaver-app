@@ -39,11 +39,9 @@ router.delete("/history/:id", authMiddleware, async (req, res) => {
 // Save prediction
 router.post("/predict", authMiddleware, async (req, res) => {
   try {
-    const { title, company, description, prediction, result, confidence, confidencePercentage, source, url } = req.body
-
-    const newPrediction = new Prediction({
-      userId: req.userId,
+    const {
       title,
+      companyName,
       company,
       description,
       prediction,
@@ -52,6 +50,28 @@ router.post("/predict", authMiddleware, async (req, res) => {
       confidencePercentage,
       source,
       url,
+      jobData,
+      predictionPayload,
+      contributingFactors,
+      companyVerification,
+    } = req.body
+
+    const newPrediction = new Prediction({
+      userId: req.userId,
+      title,
+      companyName,
+      company,
+      description,
+      prediction,
+      result,
+      confidence,
+      confidencePercentage,
+      source,
+      url,
+      jobData,
+      predictionPayload,
+      contributingFactors,
+      companyVerification,
     })
 
     await newPrediction.save()
@@ -63,7 +83,22 @@ router.post("/predict", authMiddleware, async (req, res) => {
 
 router.post("/save-prediction", authMiddleware, async (req, res) => {
   try {
-    const { title, company, description, prediction, result, confidence, confidencePercentage, source, url } = req.body
+    const {
+      title,
+      companyName,
+      company,
+      description,
+      prediction,
+      result,
+      confidence,
+      confidencePercentage,
+      source,
+      url,
+      jobData,
+      predictionPayload,
+      contributingFactors,
+      companyVerification,
+    } = req.body
 
     // Validate required fields
     if (!title || prediction === undefined || !result) {
@@ -73,6 +108,7 @@ router.post("/save-prediction", authMiddleware, async (req, res) => {
     const newPrediction = new Prediction({
       userId: req.userId,
       title,
+      companyName,
       company,
       description,
       prediction,
@@ -81,6 +117,10 @@ router.post("/save-prediction", authMiddleware, async (req, res) => {
       confidencePercentage,
       source,
       url,
+      jobData,
+      predictionPayload,
+      contributingFactors,
+      companyVerification,
     })
 
     await newPrediction.save()
@@ -115,21 +155,22 @@ router.get("/shap-explanations/:id", authMiddleware, async (req, res) => {
     }
 
     // Send raw job data to the Python API for preprocessing and SHAP explanations
-    const jobData = {
-      title: prediction.title,
-      company_profile: prediction.company,
-      description: prediction.description,
-      requirements: prediction.requirements || "", // Ensure all fields are included
-      benefits: prediction.benefits || "",
-      telecommuting: prediction.telecommuting || 0,
-      has_company_logo: prediction.has_company_logo || 0,
-      has_questions: prediction.has_questions || 0,
-      employment_type: prediction.employment_type || "",
-      required_experience: prediction.required_experience || "",
-      required_education: prediction.required_education || "",
-      industry: prediction.industry || "",
-      function: prediction.function || "",
-    }
+    const jobData =
+      prediction.jobData || {
+        title: prediction.title,
+        company_profile: prediction.company,
+        description: prediction.description,
+        requirements: prediction.requirements || "",
+        benefits: prediction.benefits || "",
+        telecommuting: prediction.telecommuting || 0,
+        has_company_logo: prediction.has_company_logo || 0,
+        has_questions: prediction.has_questions || 0,
+        employment_type: prediction.employment_type || "",
+        required_experience: prediction.required_experience || "",
+        required_education: prediction.required_education || "",
+        industry: prediction.industry || "",
+        function: prediction.function || "",
+      }
 
     // Make a request to the Python API service
     const response = await axios.post("http://localhost:5001/api/explain", jobData)

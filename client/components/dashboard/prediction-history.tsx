@@ -3,21 +3,33 @@
 import { useEffect, useState } from "react"
 import axios from "axios"
 import { Loader2, Trash2 } from "lucide-react"
-import FeatureContributionChart from "@/components/dashboard/feature-contribution-chart"
+import PredictionResult from "./prediction-result"
 
-interface Prediction {
+interface StoredPrediction {
   _id: string
   title: string
-  confidence: number
+  companyName?: string
+  company?: string
+  description?: string
+  prediction: number
   result: string
+  confidence: number
+  confidencePercentage: number
+  source: "link" | "manual"
+  url?: string
   timestamp: string
+  companyVerification?: any
+  predictionPayload?: any
+  contributingFactors?: { feature: string; shap_value: number }[]
+  jobData?: Record<string, any>
 }
 
 export default function PredictionHistory() {
-  const [predictions, setPredictions] = useState<Prediction[]>([])
+  const [predictions, setPredictions] = useState<StoredPrediction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [contributingFactors, setContributingFactors] = useState<any>({})
+  const [selectedPrediction, setSelectedPrediction] = useState<any>(null)
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchHistory()
@@ -38,15 +50,50 @@ export default function PredictionHistory() {
   }
 
   const fetchContributingFactors = async (id: string) => {
+    const token = localStorage.getItem("token")
+    const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/shap-explanations/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return response.data.top_contributors || []
+  }
+
+  const openPrediction = async (prediction: StoredPrediction) => {
     try {
-      const token = localStorage.getItem("token")
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/shap-explanations/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      setOpeningId(prediction._id)
+      const storedPayload = prediction.predictionPayload || {}
+      let contributingFactors = prediction.contributingFactors || []
+
+      if (!contributingFactors.length) {
+        try {
+          contributingFactors = await fetchContributingFactors(prediction._id)
+        } catch (err) {
+          console.error("Failed to fetch contributing factors", err)
+        }
+      }
+
+      setSelectedPrediction({
+        prediction: storedPayload.prediction ?? prediction.prediction,
+        result: storedPayload.result ?? prediction.result,
+        confidence: storedPayload.confidence ?? prediction.confidence,
+        confidence_percentage: storedPayload.confidence_percentage ?? prediction.confidencePercentage,
+        predicted_class_confidence:
+          storedPayload.predicted_class_confidence ??
+          Math.max(storedPayload.confidence ?? prediction.confidence, 0),
+        predicted_class_confidence_pct:
+          storedPayload.predicted_class_confidence_pct ??
+          ((storedPayload.confidence ?? prediction.confidence) * 100),
+        confidence_message:
+          storedPayload.confidence_message ||
+          `Saved analysis for ${prediction.title}. Review the job and company verification details below.`,
+        fraud_confidence_label: storedPayload.fraud_confidence_label || prediction.result,
+        llm_fraud_score: storedPayload.llm_fraud_score,
+        contributingFactors,
+        company_verification: storedPayload.company_verification || prediction.companyVerification,
       })
-      console.log("Fetched contributing factors:", response.data.top_contributors)
-      setContributingFactors((prev: any) => ({ ...prev, [id]: response.data.top_contributors }))
-    } catch (err) {
-      console.error("Failed to fetch contributing factors", err)
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to open saved prediction")
+    } finally {
+      setOpeningId(null)
     }
   }
 
@@ -57,16 +104,23 @@ export default function PredictionHistory() {
         headers: { Authorization: `Bearer ${token}` },
       })
       setPredictions(predictions.filter((p) => p._id !== id))
+      if (selectedPrediction?._id === id) {
+        setSelectedPrediction(null)
+      }
     } catch (err) {
       setError("Failed to delete prediction")
     }
+  }
+
+  if (selectedPrediction) {
+    return <PredictionResult prediction={selectedPrediction} onReset={() => setSelectedPrediction(null)} />
   }
 
   return (
     <div className="space-y-6 w-full">
       <div>
         <h1 className="text-3xl font-bold mb-2">Prediction History</h1>
-        <p className="text-gray-400">View all your past job analyses</p>
+        <p className="text-gray-400">Click any row to reopen the full saved analysis view.</p>
       </div>
 
       {loading ? (
@@ -93,8 +147,20 @@ export default function PredictionHistory() {
             </thead>
             <tbody>
               {predictions.map((pred) => (
-                <tr key={pred._id} className="border-b border-[#00d9ff]/10 hover:bg-[#1a1f3a]/50 transition">
-                  <td className="px-6 py-4 text-white">{pred.title}</td>
+                <tr
+                  key={pred._id}
+                  onClick={() => openPrediction(pred)}
+                  className="cursor-pointer border-b border-[#00d9ff]/10 transition hover:bg-[#1a1f3a]/50"
+                >
+                  <td className="px-6 py-4 text-white">
+                    <div className="flex items-center gap-3">
+                      {openingId === pred._id ? <Loader2 className="h-4 w-4 animate-spin text-[#00d9ff]" /> : null}
+                      <div>
+                        <p>{pred.title}</p>
+                        {pred.companyName ? <p className="text-xs text-gray-400">{pred.companyName}</p> : null}
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-semibold ${
@@ -112,7 +178,10 @@ export default function PredictionHistory() {
                   <td className="px-6 py-4 text-gray-400 text-sm">{new Date(pred.timestamp).toLocaleDateString()}</td>
                   <td className="px-6 py-4">
                     <button
-                      onClick={() => handleDelete(pred._id)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleDelete(pred._id)
+                      }}
                       className="p-2 hover:bg-red-500/20 rounded-lg transition text-red-400"
                     >
                       <Trash2 size={18} />
@@ -122,7 +191,6 @@ export default function PredictionHistory() {
               ))}
             </tbody>
           </table>
-         
         </div>
       )}
     </div>

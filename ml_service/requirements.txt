@@ -6,6 +6,5 @@ scikit-learn
 numpy
 pandas
 requests
-Scrapy
-google-generativeai
+google-genai
 shap

@@ -10,6 +10,9 @@ const predictionSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  companyName: {
+    type: String,
+  },
   company: {
     type: String,
   },
@@ -41,6 +44,19 @@ const predictionSchema = new mongoose.Schema({
   },
   url: {
     type: String,
+  },
+  jobData: {
+    type: mongoose.Schema.Types.Mixed,
+  },
+  predictionPayload: {
+    type: mongoose.Schema.Types.Mixed,
+  },
+  contributingFactors: {
+    type: [mongoose.Schema.Types.Mixed],
+    default: [],
+  },
+  companyVerification: {
+    type: mongoose.Schema.Types.Mixed,
   },
   timestamp: {
     type: Date,

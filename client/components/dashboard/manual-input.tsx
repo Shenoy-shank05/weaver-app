@@ -9,6 +9,12 @@ import PredictionResult from "./prediction-result"
 
 interface FormData {
   title: string
+  company_name: string
+  recruiter_email: string
+  company_website: string
+  company_linkedin: string
+  registration_id: string
+  company_location: string
   company_profile: string
   description: string
   requirements: string
@@ -102,6 +108,12 @@ export default function ManualInput() {
 
   const [formData, setFormData] = useState<FormData>({
     title: "",
+    company_name: "",
+    recruiter_email: "",
+    company_website: "",
+    company_linkedin: "",
+    registration_id: "",
+    company_location: "",
     company_profile: "",
     description: "",
     requirements: "",
@@ -141,14 +153,25 @@ export default function ManualInput() {
     setLoading(true)
 
     try {
-      const response = await axios.post(`${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/predict`, {formData,url:"manual-input"})
-      setPrediction(response.data)
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/predict`, {
+        jobData: formData,
+        url: "manual-input",
+      })
+
+      // Fetch contributing factors for the analyzed job
+      const factorsResponse = await axios.post(
+        `${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/explain`,
+        formData
+      )
+      const nextPrediction = { ...response.data, contributingFactors: factorsResponse.data.top_contributors }
+      setPrediction(nextPrediction)
 
       const token = localStorage.getItem("token")
       await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/save-prediction`,
         {
           title: formData.title,
+          companyName: formData.company_name,
           company: formData.company_profile,
           description: formData.description,
           prediction: response.data.prediction,
@@ -156,18 +179,15 @@ export default function ManualInput() {
           confidence: response.data.confidence,
           confidencePercentage: response.data.confidence_percentage,
           source: "manual",
+          jobData: formData,
+          predictionPayload: response.data,
+          contributingFactors: factorsResponse.data.top_contributors,
+          companyVerification: response.data.company_verification,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       )
-
-      // Fetch contributing factors for the analyzed job
-      const factorsResponse = await axios.post(
-        `${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/explain`,
-        formData
-      )
-      setPrediction((prev: any) => ({ ...prev, contributingFactors: factorsResponse.data.top_contributors }))
     } catch (err: any) {
       setError(err.response?.data?.error || "Prediction failed")
     } finally {
@@ -203,6 +223,18 @@ export default function ManualInput() {
             placeholder="e.g., Senior Developer"
             className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
             required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">Company Name</label>
+          <input
+            type="text"
+            name="company_name"
+            value={formData.company_name}
+            onChange={handleChange}
+            placeholder="e.g., Infosys, Accenture"
+            className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
           />
         </div>
 
@@ -352,6 +384,77 @@ export default function ManualInput() {
             rows={3}
             className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition resize-none"
           />
+        </div>
+
+        <div className="rounded-2xl border border-[#00d9ff]/20 bg-[#0f1530]/70 p-6 space-y-5">
+          <div>
+            <h3 className="text-lg font-semibold text-white">Company Background Verification</h3>
+            <p className="mt-1 text-sm text-gray-400">
+              Add official company details so we can verify the recruiter email, website domain, and registration signals.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Recruiter Email</label>
+              <input
+                type="email"
+                name="recruiter_email"
+                value={formData.recruiter_email}
+                onChange={handleChange}
+                placeholder="e.g., hiring@company.com"
+                className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Official Website</label>
+              <input
+                type="url"
+                name="company_website"
+                value={formData.company_website}
+                onChange={handleChange}
+                placeholder="https://company.com"
+                className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Company LinkedIn</label>
+              <input
+                type="url"
+                name="company_linkedin"
+                value={formData.company_linkedin}
+                onChange={handleChange}
+                placeholder="https://linkedin.com/company/..."
+                className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Registration ID / CIN / LLPIN</label>
+              <input
+                type="text"
+                name="registration_id"
+                value={formData.registration_id}
+                onChange={handleChange}
+                placeholder="e.g., U12345KA2024PTC123456"
+                className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">Company Location</label>
+              <input
+                type="text"
+                name="company_location"
+                value={formData.company_location}
+                onChange={handleChange}
+                placeholder="e.g., Bengaluru, Karnataka, India"
+                className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Checkboxes */}

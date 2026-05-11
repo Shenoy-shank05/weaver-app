@@ -6,10 +6,11 @@ import { useState } from "react"
 import axios from "axios"
 import { Loader2, LinkIcon } from "lucide-react"
 import PredictionResult from "./prediction-result"
-import ContributingFactors from "./contributing-factors"
 
 interface JobData {
   title: string
+  company_name: string
+  recruiter_email?: string
   company_profile: string
   description: string
   requirements: string
@@ -41,7 +42,9 @@ export default function PasteJobLink() {
       const response = await axios.post(`${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/scrape`, { url })
       setJobData(response.data)
     } catch (err: any) {
-      setError(err.response?.data?.error || "Failed to scrape job posting")
+      const apiError = err.response?.data
+      const message = apiError?.details ? `${apiError.error}: ${apiError.details}` : apiError?.error
+      setError(message || "Failed to scrape job posting")
     } finally {
       setLoading(false)
     }
@@ -53,13 +56,21 @@ export default function PasteJobLink() {
     setLoading(true)
     try {
       const response = await axios.post(`${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/predict`, {jobData, url})
-      setPrediction(response.data)
+
+      // Fetch contributing factors for the analyzed job
+      const factorsResponse = await axios.post(
+        `${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/explain`,
+        jobData
+      )
+      const nextPrediction = { ...response.data, contributingFactors: factorsResponse.data.top_contributors }
+      setPrediction(nextPrediction)
 
       const token = localStorage.getItem("token")
       await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/api/save-prediction`,
         {
           title: jobData.title,
+          companyName: jobData.company_name,
           company: jobData.company_profile,
           description: jobData.description,
           prediction: response.data.prediction,
@@ -68,18 +79,15 @@ export default function PasteJobLink() {
           confidencePercentage: response.data.confidence_percentage,
           source: "link",
           url: url,
+          jobData,
+          predictionPayload: response.data,
+          contributingFactors: factorsResponse.data.top_contributors,
+          companyVerification: response.data.company_verification,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       )
-
-      // Fetch contributing factors for the analyzed job
-      const factorsResponse = await axios.post(
-        `${process.env.NEXT_PUBLIC_ML_SERVICE_URL}/api/explain`,
-        jobData
-      )
-      setPrediction((prev: any) => ({ ...prev, contributingFactors: factorsResponse.data.top_contributors }))
     } catch (err: any) {
       setError(err.response?.data?.error || "Prediction failed")
     } finally {
@@ -146,6 +154,26 @@ export default function PasteJobLink() {
                     onChange={(e) => setJobData({ ...jobData, title: e.target.value })}
                     className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
                     required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Company Name</label>
+                  <input
+                    type="text"
+                    value={jobData.company_name || ""}
+                    onChange={(e) => setJobData({ ...jobData, company_name: e.target.value })}
+                    className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Recruiter Email</label>
+                  <input
+                    type="email"
+                    value={jobData.recruiter_email || ""}
+                    onChange={(e) => setJobData({ ...jobData, recruiter_email: e.target.value })}
+                    className="w-full px-4 py-3 bg-[#1a1f3a] border border-[#00d9ff]/30 rounded-lg text-white placeholder-gray-500 focus:border-[#00d9ff] focus:outline-none transition"
                   />
                 </div>
 
@@ -325,15 +353,7 @@ export default function PasteJobLink() {
           )}
         </>
       ) : (
-        <div>
-          {/* Job Prediction Card */}
-          <PredictionResult prediction={prediction} onReset={() => setPrediction(null)} />
-
-          {/* Contributing Factors Section */}
-          {prediction?.contributingFactors && (
-            <ContributingFactors factors={prediction.contributingFactors} />
-          )}
-        </div>
+        <PredictionResult prediction={prediction} onReset={() => setPrediction(null)} />
       )}
     </div>
   )
