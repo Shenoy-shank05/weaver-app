@@ -1021,8 +1021,8 @@ def internal_error(error):
 
 if __name__ == '__main__':
     # Initialize prediction engine on startup
-    
+    port=int(os.getenv("PORT", 5001))
     if initialize_engine():
-        app.run(debug=True, port=5001)
+        app.run(debug=True, port=port)
     else:
         print("[v0] Failed to initialize prediction engine. Please check model files.")
